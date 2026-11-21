@@ -1,6 +1,9 @@
 import { test as base } from "@playwright/test";
 import { LoginPage } from "../pages/login.page";
 import { DashboardPage } from "../pages/dashboard.page";
+import { ProductsPage } from "../pages/products.page";
+import { ProductFormPage } from "../pages/product-form.page";
+import { CatalogApi } from "../support/catalog-api";
 import { clearOtp } from "../support/db";
 import { env } from "../support/env";
 
@@ -8,6 +11,9 @@ type Fixtures = {
   freshOtpState: void;
   loginPage: LoginPage;
   dashboardPage: DashboardPage;
+  productsPage: ProductsPage;
+  productForm: ProductFormPage;
+  catalog: CatalogApi;
 };
 
 export const test = base.extend<Fixtures>({
@@ -21,6 +27,14 @@ export const test = base.extend<Fixtures>({
   ],
   loginPage: async ({ page }, use) => use(new LoginPage(page)),
   dashboardPage: async ({ page }, use) => use(new DashboardPage(page)),
+  productsPage: async ({ page }, use) => use(new ProductsPage(page)),
+  productForm: async ({ page }, use) => use(new ProductFormPage(page)),
+  // Seeds data through the API and removes it after the test.
+  catalog: async ({ request }, use) => {
+    const api = new CatalogApi(request);
+    await use(api);
+    await api.cleanup();
+  },
 });
 
 export { expect } from "@playwright/test";

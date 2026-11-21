@@ -6,6 +6,7 @@ Real browser tests against the real Next app and the real API on port 4000.
 1. Start the API and Postgres.
 2. Create `.env.e2e` (gitignored) with `E2E_DATABASE_URL`, `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_OTP=123456`.
 3. `npm run test:e2e` (starts its own Next dev server on port 3100).
+Runs in Firefox, headed (visible browser) by default; set `E2E_HEADLESS=1` (or CI) to run headless.
 Other scripts: `npm run test:e2e:ui`, `npm run test:e2e:report`.
 
 ## Layout
@@ -20,4 +21,4 @@ The API emails a hashed OTP, so tests cannot read it. After the API issues a cod
 ## Rules
 - Each delivered feature adds or updates specs here before it is merged.
 - Specs that change the session (refresh, logout) sign in themselves; read only specs reuse the saved session.
-- The API limits login to 10 per minute, so the suite runs on one worker and `support/rate-limit.ts` paces login steps to stay under it (per worker process; wait a minute between separate runs).
+- The API limits every route to 100 requests per minute per IP, so the suite runs on one worker and `support/rate-limit.ts` paces login steps to stay under it (per worker process; wait a minute between separate runs).

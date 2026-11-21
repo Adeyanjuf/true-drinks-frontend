@@ -1,8 +1,8 @@
-// The API allows 10 auth requests per minute per IP. Every login step in the UI
+// The API allows 100 requests per minute per IP. Every login step in the UI
 // costs one request, so a full run can exceed that. Page objects call
 // `reserveAuthRequest()` before each login step, and this waits when the
 // sliding one minute window is nearly full.
-const LIMIT = 9; // stay one under the real limit
+const LIMIT = Number(process.env.E2E_AUTH_RATE_LIMIT ?? 90); // stay under the API limit (100 per minute)
 const WINDOW_MS = 60_000;
 const sent: number[] = [];
 

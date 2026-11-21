@@ -8,6 +8,9 @@ try {
 }
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
+// Firefox is the default browser. E2E_BROWSER=chromium is a fallback (e.g. when the Firefox download is blocked).
+const device =
+  process.env.E2E_BROWSER === "chromium" ? devices["Desktop Chrome"] : devices["Desktop Firefox"];
 const AUTH_FILE = "e2e/.auth/admin.json";
 
 export default defineConfig({
@@ -23,6 +26,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
+    // Headed by default so runs can be watched. Set E2E_HEADLESS=1 for CI.
+    headless: process.env.E2E_HEADLESS === "1" || !!process.env.CI,
     baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -38,13 +43,13 @@ export default defineConfig({
     {
       name: "public",
       testMatch: /.*\.public\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...device },
     },
     {
       name: "admin",
       testMatch: /.*\.admin\.spec\.ts/,
       dependencies: ["setup"],
-      use: { ...devices["Desktop Chrome"], storageState: AUTH_FILE },
+      use: { ...device, storageState: AUTH_FILE },
     },
   ],
 });
