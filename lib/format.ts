@@ -10,5 +10,6 @@ export function poundsToPence(pounds: string): number {
 
 export const penceToPounds = (pence: number) => (pence / 100).toFixed(2);
 
+/** 2400 -> "2.4 kg", 1100 -> "1.1 kg", 1000 -> "1 kg", 750 -> "750 g". */
 export const formatWeight = (grams: number) =>
-  grams >= 1000 ? `${(grams / 1000).toFixed(grams % 1000 === 0 ? 0 : 2)} kg` : `${grams} g`;
+  grams >= 1000 ? `${Number((grams / 1000).toFixed(2))} kg` : `${grams} g`;

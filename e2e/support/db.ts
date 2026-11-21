@@ -10,7 +10,7 @@ if (env.otp !== "123456") {
   throw new Error("E2E_OTP must stay 123456 unless KNOWN_OTP_HASH is regenerated.");
 }
 
-function runSql(sql: string, vars: Record<string, string>): void {
+export function runSql(sql: string, vars: Record<string, string>): void {
   const args = [env.databaseUrl, "-v", "ON_ERROR_STOP=1", "-q", "-f", "-"];
   for (const [key, value] of Object.entries(vars)) args.push("-v", `${key}=${value}`);
   execFileSync("psql", args, { input: sql, stdio: ["pipe", "ignore", "inherit"] });

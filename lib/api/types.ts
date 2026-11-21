@@ -48,3 +48,52 @@ export type ProductPayload = {
   lowStockThreshold?: number;
   categoryId: string;
 };
+
+export type OrderStatus = "PACKAGING" | "OUT_FOR_DELIVERY" | "DELIVERED";
+
+export type OrderItem = {
+  id: string;
+  productId: string | null;
+  name: string;
+  listPricePence: number;
+  discountPercent: number;
+  unitPricePence: number;
+  weightGrams: number;
+  quantity: number;
+  isAgeRestricted: boolean;
+};
+
+export type Order = {
+  id: string;
+  trackingId: string;
+  email: string;
+  name: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  postcode: string;
+  phone: string;
+  country: string;
+  status: OrderStatus;
+  subtotalPence: number;
+  discountPence: number;
+  shippingPence: number;
+  totalPence: number;
+  totalWeightGrams: number;
+  promoCode: string | null;
+  ageVerifiedAt: string | null;
+  ageMethod: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items?: OrderItem[];
+};
+
+export type OrderHistoryEntry = {
+  id: string;
+  fromStatus: OrderStatus | null;
+  toStatus: OrderStatus;
+  changedAt: string;
+  changedBy: { id: string; email: string; name: string } | null;
+};
+
+export type OrderDetail = Order & { items: OrderItem[]; history: OrderHistoryEntry[] };

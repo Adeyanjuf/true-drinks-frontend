@@ -43,7 +43,7 @@ test.describe("product create, edit and delete", () => {
     const row = productsPage.row(name);
     await expect(row).toContainText("£17.09"); // 1899 pence less 10%
     await expect(row).toContainText("£18.99");
-    await expect(row).toContainText("1.10 kg");
+    await expect(row).toContainText("1.1 kg");
     await expect(row).toContainText("Yes");
     await expect(row).toContainText("E2E Brand");
 
