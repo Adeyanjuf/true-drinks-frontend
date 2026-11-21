@@ -23,15 +23,16 @@ type Fixtures = {
 };
 
 export const test = base.extend<Fixtures>({
-  // Runs for every test so the API's 60s code cooldown never leaks between tests.
-  freshOtpState: [
-    async ({}, use) => {
-      clearOtp(env.adminEmail);
-      await use();
-    },
-    { auto: true },
-  ],
-  loginPage: async ({ page }, use) => use(new LoginPage(page)),
+  // The API refuses a new code within 60s of the last one. Only tests that use the
+  // login page need this reset, so it is not automatic.
+  freshOtpState: async ({}, use) => {
+    clearOtp(env.adminEmail);
+    await use();
+  },
+  loginPage: async ({ page, freshOtpState }, use) => {
+    void freshOtpState;
+    await use(new LoginPage(page));
+  },
   dashboardPage: async ({ page }, use) => use(new DashboardPage(page)),
   productsPage: async ({ page }, use) => use(new ProductsPage(page)),
   productForm: async ({ page }, use) => use(new ProductFormPage(page)),
