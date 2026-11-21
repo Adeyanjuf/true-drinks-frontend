@@ -1,6 +1,7 @@
 import { test as base } from "@playwright/test";
 import { LoginPage } from "../pages/login.page";
 import { DashboardPage } from "../pages/dashboard.page";
+import { CategoriesPage } from "../pages/categories.page";
 import { ProductsPage } from "../pages/products.page";
 import { ProductFormPage } from "../pages/product-form.page";
 import { CatalogApi } from "../support/catalog-api";
@@ -13,6 +14,7 @@ type Fixtures = {
   dashboardPage: DashboardPage;
   productsPage: ProductsPage;
   productForm: ProductFormPage;
+  categoriesPage: CategoriesPage;
   catalog: CatalogApi;
 };
 
@@ -29,6 +31,7 @@ export const test = base.extend<Fixtures>({
   dashboardPage: async ({ page }, use) => use(new DashboardPage(page)),
   productsPage: async ({ page }, use) => use(new ProductsPage(page)),
   productForm: async ({ page }, use) => use(new ProductFormPage(page)),
+  categoriesPage: async ({ page }, use) => use(new CategoriesPage(page)),
   // Seeds data through the API and removes it after the test.
   catalog: async ({ request }, use) => {
     const api = new CatalogApi(request);

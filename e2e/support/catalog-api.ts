@@ -53,6 +53,14 @@ export class CatalogApi {
     this.productIds.push(...page.items.map((i) => i.id));
   }
 
+  /** Register a category created through the UI so cleanup removes it even if the test fails. */
+  async trackCategoryByName(name: string) {
+    const all = await this.unwrap<{ id: string; name: string }[]>(
+      await this.request.get("/api/admin/proxy/categories"),
+    );
+    this.categoryIds.push(...all.filter((c) => c.name === name).map((c) => c.id));
+  }
+
   /** Remove everything this instance created. Products go first (category delete is restricted). */
   async cleanup() {
     for (const id of this.productIds) {

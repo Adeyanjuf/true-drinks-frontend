@@ -80,3 +80,32 @@ export function useDeleteProduct() {
     onSuccess: () => qc.invalidateQueries({ queryKey: keys.products }),
   });
 }
+
+export function useCreateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => adminApi<Category>("POST", "categories", { body: { name } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.categories }),
+  });
+}
+
+export function useUpdateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      adminApi<Category>("PATCH", `categories/${id}`, { body: { name } }),
+    onSuccess: () => {
+      // Product rows show the category name, so refresh them as well.
+      void qc.invalidateQueries({ queryKey: keys.categories });
+      void qc.invalidateQueries({ queryKey: keys.products });
+    },
+  });
+}
+
+export function useDeleteCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => adminApi<void>("DELETE", `categories/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.categories }),
+  });
+}
