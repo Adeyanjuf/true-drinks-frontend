@@ -2,12 +2,16 @@ import { expect, type Locator, type Page } from "@playwright/test";
 import { seedKnownOtp } from "../support/db";
 import { env } from "../support/env";
 import { reserveAuthRequest } from "../support/rate-limit";
+import { OtpStep } from "./otp-step";
 
 export class LoginPage {
   readonly heading: Locator;
   readonly identifier: Locator;
   readonly password: Locator;
   readonly otp: Locator;
+  readonly passwordToggle: Locator;
+  readonly codeStep: OtpStep;
+  readonly resendButton: Locator;
   readonly otpBoxes: Locator;
   readonly slideshow: Locator;
   readonly continueButton: Locator;
@@ -18,7 +22,10 @@ export class LoginPage {
   constructor(readonly page: Page) {
     this.heading = page.getByText("Admin sign in");
     this.identifier = page.getByLabel("Email", { exact: true });
-    this.password = page.getByLabel("Password");
+    this.password = page.getByLabel("Password", { exact: true });
+    this.passwordToggle = page.getByRole("button", { name: /^(Show|Hide) password$/ });
+    this.codeStep = new OtpStep(page);
+    this.resendButton = this.codeStep.resend;
     this.otp = page.getByRole("group", { name: "Verification code" });
     this.otpBoxes = this.otp.getByRole("textbox");
     this.slideshow = page.getByTestId("auth-slideshow");

@@ -5,17 +5,18 @@ Real browser tests against the real Next app and the real API on port 4000.
 ## Run
 1. Start the API and Postgres.
 2. Create `.env.e2e` (gitignored) with `E2E_DATABASE_URL`, `E2E_ADMIN_EMAIL`, `E2E_ADMIN_PASSWORD`, `E2E_OTP=123456`.
-3. Run specs for a feature (starts its own Next dev server on port 3100):
+3. Run specs for a feature. Tests use port 3000: an already running `npm run dev` is reused, otherwise one is started (Next allows only one dev server per folder, so stop yours only if you want a clean start). Set `E2E_PORT` to change it.
 
 | Command | Runs |
 |---|---|
 | `npm run test:e2e` | the latest feature only (named in `e2e/latest-feature.txt`) |
 | `npm run test:e2e -- products orders` | the listed feature folders |
-| `npm run test:e2e:auth` | the auth scenarios (login, OTP, refresh, forged cookie, sign out) |
+| `npm run test:e2e:auth` | the admin auth scenarios (login, code step, carousel, refresh, forged cookie, sign out) |
+| `npm run test:e2e -- customer-auth` | customer sign in, sign up, Google pages, password reset, customer session |
 | `npm run test:e2e:all` | everything |
 
 Flags pass through, for example `npm run test:e2e -- --grep "delete"`. Also: `npm run test:e2e:ui`, `npm run test:e2e:report`.
-Runs in Firefox, headed, by default. Set `E2E_HEADLESS=1` (or CI) for headless, and `E2E_BROWSER=chromium` as a fallback browser.
+Runs in Firefox, headed, by default (install once with `npx playwright install firefox`; the config forces X11 because headed Firefox crashes on some Wayland desktops). Set `E2E_HEADLESS=1` (or CI) for headless, and `E2E_BROWSER=chromium` as a fallback browser.
 
 ## When to run what
 - Normal work: `npm run test:e2e` (latest feature). The saved admin session is reused, so no login happens.
@@ -34,6 +35,13 @@ Runs in Firefox, headed, by default. Set `E2E_HEADLESS=1` (or CI) for headless, 
 
 ## How login works in tests
 The API emails a hashed OTP, so tests cannot read it. After the API issues a code, `seedKnownOtp` overwrites that user's stored hash in the database with the hash of `123456`. Only the OTP columns of the admin user are touched.
+
+## Customer auth tests
+- `support/customers.ts` creates verified test customers through the app (`e2e-cust-xxxx@example.invalid`) and the fixtures delete them afterwards; their carts and tokens cascade.
+- The code step uses the same known code trick as admin (`seedKnownOtp`), and `clearOtp` before a sign in avoids the API's 60 second gap.
+- Real Google consent cannot be automated. Tests cover the redirect that starts the flow and the callback and complete profile pages (expired or missing code or ticket, validation, username availability), with the exchange stubbed for the success path.
+- Forgot and reset password happy paths stub the app's route, because the API limits forgot password to 3 per 15 minutes and sends real email.
+- Carousel timing tests use Playwright's clock (`page.clock`), so nothing waits 5 real seconds.
 
 ## Rules
 - Each delivered feature adds or updates specs here before it is merged.

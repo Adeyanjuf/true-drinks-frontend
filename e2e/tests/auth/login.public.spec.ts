@@ -1,5 +1,5 @@
 import { test, expect } from "../../fixtures";
-import { seedKnownOtp } from "../../support/db";
+import { clearOtp, seedKnownOtp } from "../../support/db";
 import { env } from "../../support/env";
 
 test.describe("admin login (signed out)", () => {
@@ -74,6 +74,61 @@ test.describe("admin login (signed out)", () => {
   });
 });
 
+test.describe("admin login form behaviour", () => {
+  test("has the admin title and the logo as its favicon", async ({ loginPage, page }) => {
+    await loginPage.goto();
+    await expect(page).toHaveTitle("Admin sign in | True Drinks");
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", /\/icon\.svg/);
+  });
+
+  test("shows and hides the password", async ({ loginPage }) => {
+    await loginPage.goto();
+    await loginPage.password.fill("secret-value");
+    await expect(loginPage.password).toHaveAttribute("type", "password");
+    await loginPage.passwordToggle.click();
+    await expect(loginPage.password).toHaveAttribute("type", "text");
+    await loginPage.passwordToggle.click();
+    await expect(loginPage.password).toHaveAttribute("type", "password");
+  });
+
+  test("clears an error as soon as you edit a field", async ({ loginPage }) => {
+    await loginPage.goto();
+    await loginPage.submitCredentials(env.adminEmail, "definitely-wrong-password");
+    await expect(loginPage.alert).toContainText(/invalid credentials/i);
+    await loginPage.password.fill("another-attempt");
+    await expect(loginPage.alert).toBeHidden();
+  });
+
+  test("a wrong code error clears when you type again", async ({ loginPage, page }) => {
+    await loginPage.goto();
+    await loginPage.submitCredentials(env.adminEmail, env.adminPassword);
+    await expect(loginPage.otp).toBeVisible();
+    seedKnownOtp(env.adminEmail);
+    await loginPage.submitOtp("000000");
+    await expect(loginPage.alert).toBeVisible();
+    await loginPage.codeStep.boxes.last().press("Backspace");
+    await expect(loginPage.alert).toBeHidden();
+    await expect(page.getByText("Step 2 of 2")).toBeVisible();
+  });
+
+  test("resend code waits for the countdown, then sends a new code", async ({ loginPage, page }) => {
+    await page.clock.install();
+    await loginPage.goto();
+    await loginPage.submitCredentials(env.adminEmail, env.adminPassword);
+    await expect(loginPage.otp).toBeVisible();
+
+    await expect(loginPage.resendButton).toBeDisabled();
+    await expect(loginPage.resendButton).toContainText("Resend code in");
+    await page.clock.fastForward(61_000);
+    await expect(loginPage.resendButton).toBeEnabled();
+
+    clearOtp(env.adminEmail); // the API enforces its own 60 second gap on real time
+    await loginPage.resendButton.click();
+    await expect(page.locator("form [role=status]")).toContainText(`A new code was sent to ${env.adminEmail}`);
+    await expect(loginPage.resendButton).toBeDisabled();
+  });
+});
+
 test.describe("auth layout", () => {
   test("splits the screen into two equal halves with the brand on the form side", async ({ loginPage }) => {
     await loginPage.goto();
@@ -123,12 +178,74 @@ test.describe("auth layout", () => {
     }
   });
 
-  test("slideshow can be driven by its dots", async ({ loginPage }) => {
+  test("slideshow can be driven by its progress bars and arrows", async ({ loginPage }) => {
     await loginPage.goto();
     const active = loginPage.slideshow.locator('[data-active="true"]');
     await expect(active).toHaveCount(1);
+    await expect(active).toContainText("Crafted spirits");
     await loginPage.slideshow.getByRole("button", { name: /Show slide 3/ }).click();
+    await expect(active).toContainText("Fine wines");
+    await loginPage.slideshow.getByRole("button", { name: "Next slide" }).click({ force: true });
+    await expect(active).toContainText("Mixers and more");
+    await loginPage.slideshow.getByRole("button", { name: "Previous slide" }).click({ force: true });
+    await expect(active).toContainText("Fine wines");
+    await loginPage.slideshow.getByRole("button", { name: "Next slide" }).click({ force: true });
+    await loginPage.slideshow.getByRole("button", { name: "Next slide" }).click({ force: true });
+    await expect(active).toContainText("Crafted spirits"); // wraps around
+  });
+
+  test("slideshow shows photo backgrounds that actually load", async ({ loginPage }) => {
+    await loginPage.goto();
+    const photos = loginPage.slideshow.locator("img");
+    await expect(photos).toHaveCount(5);
+    await expect.poll(() => photos.first().evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    // Served resized by Next, not the multi megabyte original.
+    expect(await photos.first().getAttribute("src")).toContain("/_next/image");
+  });
+
+  test("slideshow advances on its own and pauses while hovered", async ({ loginPage, page }) => {
+    await page.clock.install();
+    await loginPage.goto();
+    const active = loginPage.slideshow.locator('[data-active="true"]');
+    await expect(active).toContainText("Crafted spirits");
+
+    await page.clock.runFor(5_300);
     await expect(active).toContainText("Cold beers and ciders");
+
+    await loginPage.slideshow.hover();
+    await expect(loginPage.slideshow).toHaveAttribute("data-paused", "true");
+    await page.clock.runFor(12_000);
+    await expect(active).toContainText("Cold beers and ciders");
+
+    await page.mouse.move(5, 5);
+    await expect(loginPage.slideshow).toHaveAttribute("data-paused", "false");
+    await page.clock.runFor(5_300);
+    await expect(active).toContainText("Fine wines");
+  });
+
+  test("slideshow resumes after a click and pauses for keyboard focus", async ({ loginPage, page }) => {
+    await page.clock.install();
+    await loginPage.goto();
+    const active = loginPage.slideshow.locator('[data-active="true"]');
+    await loginPage.slideshow.getByRole("button", { name: /Show slide 2/ }).click();
+    await page.mouse.move(5, 5);
+    await page.clock.runFor(5_300);
+    await expect(active).toContainText("Fine wines"); // a mouse click must not leave it paused
+
+    await loginPage.slideshow.getByRole("button", { name: /Show slide 3/ }).focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await expect(loginPage.slideshow).toHaveAttribute("data-paused", "true");
+    await page.clock.runFor(12_000);
+    await expect(active).toContainText("Fine wines");
+  });
+
+  test("slideshow stays still when reduced motion is requested", async ({ loginPage, page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.clock.install();
+    await loginPage.goto();
+    await page.clock.runFor(12_000);
+    await expect(loginPage.slideshow.locator('[data-active="true"]')).toContainText("Crafted spirits");
   });
 
   test("hides the slideshow on small screens", async ({ loginPage }) => {

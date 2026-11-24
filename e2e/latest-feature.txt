@@ -1,1 +1,1 @@
-auth
+customer-auth

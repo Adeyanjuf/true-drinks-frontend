@@ -7,10 +7,12 @@ try {
   // Fine in CI where the variables are injected directly.
 }
 
-const PORT = Number(process.env.E2E_PORT ?? 3100);
+const PORT = Number(process.env.E2E_PORT ?? 3000);
 // Firefox is the default browser. E2E_BROWSER=chromium is a fallback (e.g. when the Firefox download is blocked).
-const device =
-  process.env.E2E_BROWSER === "chromium" ? devices["Desktop Chrome"] : devices["Desktop Firefox"];
+const usingChromium = process.env.E2E_BROWSER === "chromium";
+const device = usingChromium ? devices["Desktop Chrome"] : devices["Desktop Firefox"];
+// Headed Firefox crashes on some Wayland desktops (GNOME settings schema assertion), so run it through X11.
+const launchOptions = usingChromium ? {} : { env: { ...process.env, MOZ_ENABLE_WAYLAND: "0" } as Record<string, string> };
 const AUTH_FILE = "e2e/.auth/admin.json";
 
 export default defineConfig({
@@ -43,13 +45,13 @@ export default defineConfig({
     {
       name: "public",
       testMatch: /.*\.public\.spec\.ts/,
-      use: { ...device },
+      use: { ...device, launchOptions },
     },
     {
       name: "admin",
       testMatch: /.*\.admin\.spec\.ts/,
       dependencies: ["setup"],
-      use: { ...device, storageState: AUTH_FILE },
+      use: { ...device, launchOptions, storageState: AUTH_FILE },
     },
   ],
 });

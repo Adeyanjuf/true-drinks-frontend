@@ -8,6 +8,8 @@ import { OrdersPage } from "../pages/orders.page";
 import { deleteOrders, seedOrder, type SeededOrder } from "../support/orders-db";
 import { CatalogApi } from "../support/catalog-api";
 import { clearOtp } from "../support/db";
+import { CustomerAuthPage } from "../pages/customer-auth.page";
+import { createCustomer, deleteCustomers, newCustomerData, type TestCustomer } from "../support/customers";
 import { env } from "../support/env";
 
 type Fixtures = {
@@ -20,6 +22,11 @@ type Fixtures = {
   ordersPage: OrdersPage;
   seedOrder: (options?: Parameters<typeof seedOrder>[0]) => SeededOrder;
   catalog: CatalogApi;
+  customerAuth: CustomerAuthPage;
+  /** Fresh customer details (not yet registered). Removed after the test either way. */
+  newCustomer: TestCustomer;
+  /** A registered and verified customer. Removed after the test. */
+  customer: TestCustomer;
 };
 
 export const test = base.extend<Fixtures>({
@@ -47,6 +54,17 @@ export const test = base.extend<Fixtures>({
       return order;
     });
     deleteOrders(created.map((o) => o.id));
+  },
+  customerAuth: async ({ page }, use) => use(new CustomerAuthPage(page)),
+  newCustomer: async ({}, use) => {
+    const data = newCustomerData();
+    await use(data);
+    deleteCustomers([data.email]);
+  },
+  customer: async ({ request }, use) => {
+    const data = await createCustomer(request);
+    await use(data);
+    deleteCustomers([data.email]);
   },
   // Seeds data through the API and removes it after the test.
   catalog: async ({ request }, use) => {
