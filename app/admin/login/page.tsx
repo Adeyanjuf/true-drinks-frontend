@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,7 +8,8 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AuthShell, FieldError } from "@/components/auth/auth-shell";
+import { AuthShell, FieldError, FormMessage } from "@/components/auth/auth-shell";
+import { PasswordInput } from "@/components/auth/password-input";
 import { OtpInput } from "@/components/auth/otp-input";
 
 const credentialsSchema = z.object({
@@ -32,10 +33,16 @@ async function post(url: string, data: unknown) {
   return body;
 }
 
+const RESEND_COOLDOWN_SECONDS = 60;
+
+type Message = { kind: "error" | "success"; text: string } | null;
+
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<Message>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
 
   const credsForm = useForm<Credentials>({
     resolver: zodResolver(credentialsSchema),
@@ -45,27 +52,57 @@ export default function AdminLoginPage() {
     defaultValues: { otp: "" },
   });
 
+  const clearMessage = () => setMessage(null);
+  const fail = (e: unknown) =>
+    setMessage({ kind: "error", text: (e as Error).message });
+
+  // Any edit makes the previous message stale, so each field clears it.
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  async function onResend() {
+    if (!email) return;
+    clearMessage();
+    setResending(true);
+    try {
+      await post("/api/admin/auth/resend-otp", { email });
+      otpForm.reset({ otp: "" });
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+      setMessage({ kind: "success", text: `A new code was sent to ${email}` });
+    } catch (e) {
+      fail(e);
+    } finally {
+      setResending(false);
+    }
+  }
+
   async function onCredentials(values: Credentials) {
-    setError(null);
+    clearMessage();
     try {
       await post("/api/admin/auth/login", {
         identifier: values.email,
         password: values.password,
       });
+      otpForm.reset({ otp: "" });
+      setCooldown(RESEND_COOLDOWN_SECONDS);
       setEmail(values.email);
     } catch (e) {
-      setError((e as Error).message);
+      fail(e);
     }
   }
 
   async function onOtp(values: Otp) {
-    setError(null);
+    clearMessage();
     try {
       await post("/api/admin/auth/verify-otp", { email, otp: values.otp });
       router.replace("/admin");
       router.refresh();
     } catch (e) {
-      setError((e as Error).message);
+      fail(e);
     }
   }
 
@@ -101,21 +138,24 @@ export default function AdminLoginPage() {
                 id="email"
                 type="email"
                 autoComplete="username"
-                {...credsForm.register("email")}
+                {...credsForm.register("email", { onChange: clearMessage })}
               />
               <FieldError message={credsForm.formState.errors.email?.message} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 autoComplete="current-password"
-                {...credsForm.register("password")}
+                {...credsForm.register("password", { onChange: clearMessage })}
               />
               <FieldError message={credsForm.formState.errors.password?.message} />
             </div>
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            <FormMessage
+              kind={message?.kind}
+              message={message?.text ?? null}
+              onDismiss={clearMessage}
+            />
             <Button type="submit" className="w-full" disabled={credsForm.formState.isSubmitting}>
               {credsForm.formState.isSubmitting ? "Sending code…" : "Continue"}
             </Button>
@@ -130,17 +170,37 @@ export default function AdminLoginPage() {
                   <OtpInput
                     autoFocus
                     value={field.value}
-                    onChange={field.onChange}
-                    invalid={!!otpForm.formState.errors.otp || !!error}
+                    onChange={(v) => {
+                      clearMessage();
+                      field.onChange(v);
+                    }}
+                    invalid={!!otpForm.formState.errors.otp || message?.kind === "error"}
                     disabled={otpForm.formState.isSubmitting}
                   />
                 )}
               />
               <FieldError message={otpForm.formState.errors.otp?.message} />
             </div>
-            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+            <FormMessage
+              kind={message?.kind}
+              message={message?.text ?? null}
+              onDismiss={clearMessage}
+            />
             <Button type="submit" className="w-full" disabled={otpForm.formState.isSubmitting}>
               {otpForm.formState.isSubmitting ? "Verifying…" : "Sign in"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={cooldown > 0 || resending}
+              onClick={onResend}
+            >
+              {resending
+                ? "Sending…"
+                : cooldown > 0
+                  ? `Resend code in ${cooldown}s`
+                  : "Resend code"}
             </Button>
             <Button
               type="button"
@@ -148,8 +208,8 @@ export default function AdminLoginPage() {
               className="w-full"
               onClick={() => {
                 setEmail(null);
-                setError(null);
-                otpForm.reset();
+                clearMessage();
+                otpForm.reset({ otp: "" });
               }}
             >
               Back
