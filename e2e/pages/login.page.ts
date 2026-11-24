@@ -8,6 +8,8 @@ export class LoginPage {
   readonly identifier: Locator;
   readonly password: Locator;
   readonly otp: Locator;
+  readonly otpBoxes: Locator;
+  readonly slideshow: Locator;
   readonly continueButton: Locator;
   readonly signInButton: Locator;
   readonly backButton: Locator;
@@ -15,9 +17,11 @@ export class LoginPage {
 
   constructor(readonly page: Page) {
     this.heading = page.getByText("Admin sign in");
-    this.identifier = page.getByLabel("Email or username");
+    this.identifier = page.getByLabel("Email", { exact: true });
     this.password = page.getByLabel("Password");
-    this.otp = page.getByLabel("Verification code");
+    this.otp = page.getByRole("group", { name: "Verification code" });
+    this.otpBoxes = this.otp.getByRole("textbox");
+    this.slideshow = page.getByTestId("auth-slideshow");
     this.continueButton = page.getByRole("button", { name: "Continue" });
     this.signInButton = page.getByRole("button", { name: "Sign in" });
     this.backButton = page.getByRole("button", { name: "Back" });
@@ -37,7 +41,8 @@ export class LoginPage {
   }
 
   async submitOtp(code: string) {
-    await this.otp.fill(code);
+    await this.otpBoxes.first().click();
+    await this.page.keyboard.type(code);
     await reserveAuthRequest();
     await this.signInButton.click();
   }

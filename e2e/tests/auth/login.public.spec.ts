@@ -11,7 +11,7 @@ test.describe("admin login (signed out)", () => {
   test("shows validation messages when the form is empty", async ({ loginPage }) => {
     await loginPage.goto();
     await loginPage.continueButton.click();
-    await expect(loginPage.page.getByText("Enter your email or username")).toBeVisible();
+    await expect(loginPage.page.getByText("Enter a valid email address")).toBeVisible();
     await expect(loginPage.page.getByText("Enter your password")).toBeVisible();
   });
 
@@ -62,5 +62,79 @@ test.describe("admin login (signed out)", () => {
     }
     const visibleToScripts = await page.evaluate(() => document.cookie);
     expect(visibleToScripts).not.toContain("fb_admin_");
+  });
+
+  test("rejects a malformed email before calling the API", async ({ loginPage }) => {
+    await loginPage.goto();
+    await loginPage.identifier.fill("not-an-email");
+    await loginPage.password.fill("whatever1");
+    await loginPage.continueButton.click();
+    await expect(loginPage.page.getByText("Enter a valid email address")).toBeVisible();
+    await expect(loginPage.otp).toBeHidden();
+  });
+});
+
+test.describe("auth layout", () => {
+  test("splits the screen into two equal halves with the brand on the form side", async ({ loginPage }) => {
+    await loginPage.goto();
+    const form = await loginPage.page.locator("main > section").boundingBox();
+    const show = await loginPage.slideshow.boundingBox();
+    expect(form && show).toBeTruthy();
+    expect(Math.abs(form!.width - show!.width)).toBeLessThan(2);
+    await expect(loginPage.page.getByText("True Drinks")).toBeVisible();
+  });
+
+  test("does not offer Google sign in on the admin side", async ({ loginPage }) => {
+    await loginPage.goto();
+    await expect(loginPage.page.getByRole("button", { name: /google/i })).toHaveCount(0);
+  });
+
+  test("shows the step and the email the code was sent to", async ({ loginPage }) => {
+    await loginPage.goto();
+    await expect(loginPage.page.getByText("Step 1 of 2")).toBeVisible();
+    await loginPage.submitCredentials(env.adminEmail, env.adminPassword);
+    await expect(loginPage.page.getByText("Step 2 of 2")).toBeVisible();
+    await expect(loginPage.otpBoxes).toHaveCount(6);
+    await expect(loginPage.page.getByText(env.adminEmail)).toBeVisible();
+  });
+
+  test("code boxes advance, accept paste and delete backwards", async ({ loginPage }) => {
+    await loginPage.goto();
+    await loginPage.submitCredentials(env.adminEmail, env.adminPassword);
+    await loginPage.otpBoxes.first().click();
+    await loginPage.page.keyboard.type("123");
+    await expect(loginPage.otpBoxes.nth(2)).toHaveValue("3");
+    await expect(loginPage.otpBoxes.nth(3)).toBeFocused();
+    await loginPage.page.keyboard.press("Backspace");
+    await expect(loginPage.otpBoxes.nth(2)).toHaveValue("");
+    await loginPage.page.keyboard.press("Backspace");
+    await expect(loginPage.otpBoxes.nth(1)).toHaveValue("");
+    await expect(loginPage.otpBoxes.nth(1)).toBeFocused();
+
+    // Paste fills every box at once.
+    await loginPage.page.evaluate(() => {
+      const el = document.activeElement as HTMLInputElement;
+      const data = new DataTransfer();
+      data.setData("text", "987654");
+      el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    for (let i = 0; i < 6; i++) {
+      await expect(loginPage.otpBoxes.nth(i)).toHaveValue("987654"[i]);
+    }
+  });
+
+  test("slideshow can be driven by its dots", async ({ loginPage }) => {
+    await loginPage.goto();
+    const active = loginPage.slideshow.locator('[data-active="true"]');
+    await expect(active).toHaveCount(1);
+    await loginPage.slideshow.getByRole("button", { name: /Show slide 3/ }).click();
+    await expect(active).toContainText("Cold beers and ciders");
+  });
+
+  test("hides the slideshow on small screens", async ({ loginPage }) => {
+    await loginPage.page.setViewportSize({ width: 600, height: 800 });
+    await loginPage.goto();
+    await expect(loginPage.slideshow).toBeHidden();
+    await expect(loginPage.identifier).toBeVisible();
   });
 });
