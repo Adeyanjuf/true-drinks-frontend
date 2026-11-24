@@ -1,9 +1,6 @@
 import { cookies } from "next/headers";
 
 // Server-only module: never import from a "use client" file.
-export const ACCESS_COOKIE = "fb_admin_access";
-export const REFRESH_COOKIE = "fb_admin_refresh";
-
 const REFRESH_MAX_AGE = 60 * 60 * 24 * 7; // 7 days; the API stays the source of truth
 
 export const API_URL = process.env.API_URL ?? "http://localhost:4000/api";
@@ -27,54 +24,105 @@ const baseOptions = {
   path: "/",
 };
 
-export async function setSession(accessToken: string, refreshToken: string) {
-  const store = await cookies();
-  store.set(ACCESS_COOKIE, accessToken, {
-    ...baseOptions,
-    maxAge: secondsUntilExpiry(accessToken) || 60 * 15,
-  });
-  store.set(REFRESH_COOKIE, refreshToken, {
-    ...baseOptions,
-    maxAge: REFRESH_MAX_AGE,
-  });
-}
+/**
+ * Cookie backed session for one role. Admin and customer sessions use
+ * different cookie names so both can be signed in on the same browser.
+ */
+export function createSessionStore(prefix: string) {
+  const ACCESS = `${prefix}_access`;
+  const REFRESH = `${prefix}_refresh`;
+  const USER = `${prefix}_user`;
 
-export async function clearSession() {
-  const store = await cookies();
-  store.delete(ACCESS_COOKIE);
-  store.delete(REFRESH_COOKIE);
-}
+  async function setSession(
+    accessToken: string,
+    refreshToken: string,
+    user?: { name?: string; email?: string },
+  ) {
+    const store = await cookies();
+    store.set(ACCESS, accessToken, {
+      ...baseOptions,
+      maxAge: secondsUntilExpiry(accessToken) || 60 * 15,
+    });
+    store.set(REFRESH, refreshToken, { ...baseOptions, maxAge: REFRESH_MAX_AGE });
+    if (user) {
+      // Display details only (no secrets), so pages can greet the person.
+      store.set(USER, JSON.stringify({ name: user.name, email: user.email }), {
+        ...baseOptions,
+        maxAge: REFRESH_MAX_AGE,
+      });
+    }
+  }
 
-export async function getTokens() {
-  const store = await cookies();
+  async function clearSession() {
+    const store = await cookies();
+    store.delete(ACCESS);
+    store.delete(REFRESH);
+    store.delete(USER);
+  }
+
+  async function getTokens() {
+    const store = await cookies();
+    return {
+      accessToken: store.get(ACCESS)?.value,
+      refreshToken: store.get(REFRESH)?.value,
+    };
+  }
+
+  async function getUser(): Promise<{ name?: string; email?: string } | null> {
+    const raw = (await cookies()).get(USER)?.value;
+    try {
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Exchange the refresh token for a new pair. The API rotates the old one out. */
+  async function refreshSession(): Promise<boolean> {
+    const { refreshToken } = await getTokens();
+    if (!refreshToken) return false;
+
+    const res = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      await clearSession();
+      return false;
+    }
+    const body = await res.json().catch(() => ({}));
+    const payload = body.data ?? body;
+    const tokens = payload.token ?? payload;
+    if (!tokens?.accessToken || !tokens?.refreshToken) {
+      await clearSession();
+      return false;
+    }
+    await setSession(tokens.accessToken, tokens.refreshToken);
+    return true;
+  }
+
   return {
-    accessToken: store.get(ACCESS_COOKIE)?.value,
-    refreshToken: store.get(REFRESH_COOKIE)?.value,
+    ACCESS_COOKIE: ACCESS,
+    REFRESH_COOKIE: REFRESH,
+    setSession,
+    clearSession,
+    getTokens,
+    getUser,
+    refreshSession,
   };
 }
 
-/** Exchange the refresh token for a new pair. The API rotates the old one out. */
-export async function refreshSession(): Promise<boolean> {
-  const { refreshToken } = await getTokens();
-  if (!refreshToken) return false;
+export const adminSession = createSessionStore("fb_admin");
+export const customerSession = createSessionStore("fb_customer");
 
-  const res = await fetch(`${API_URL}/auth/refresh`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    await clearSession();
-    return false;
-  }
-  const body = await res.json().catch(() => ({}));
-  const payload = body.data ?? body;
-  const tokens = payload.token ?? payload;
-  if (!tokens?.accessToken || !tokens?.refreshToken) {
-    await clearSession();
-    return false;
-  }
-  await setSession(tokens.accessToken, tokens.refreshToken);
-  return true;
-}
+// Admin exports keep their original names.
+export const {
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+  setSession,
+  clearSession,
+  getTokens,
+  refreshSession,
+} = adminSession;
